@@ -117,9 +117,9 @@ function setDateToParams(helper, sqlParams, dateInterval, inputCodePrefix) {
 /**
  * The API for searching contests
  */
-exports.searchStudioContests = {
-    name: "searchStudioContests",
-    description: "searchStudioContests",
+exports.searchStudioContestsOLD = {
+    name: "searchStudioContestsOLD",
+    description: "searchStudioContestsOLD",
     inputs: {
         required: [],
         optional: ["listType", "pageSize", "pageIndex", "sortColumn", "sortOrder"].concat(FILTER_COLUMS)

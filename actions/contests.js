@@ -31,13 +31,13 @@ var SORT_COLUMN = "sortColumn";
 /**
  * Represents the default sort column.
  */
-var DEFAULT_SORT_COLUMN = "contestName";
+var DEFAULT_SORT_COLUMN = "challengeName";
 
 /**
  * Represents a predefined list of valid query parameter for active contest.
  */
 var ALLOWABLE_QUERY_PARAMETER = [
-    "listType", "type", "catalog", "contestName", "registrationStartDate.type",
+    "listType", "type", "contestName", "registrationStartDate.type",
     "registrationStartDate.firstDate", "registrationStartDate.secondDate", "submissionEndDate.type",
     "submissionEndDate.firstDate", "submissionEndDate.secondDate", "projectId", SORT_COLUMN,
     "sortOrder", "pageIndex", "pageSize", "prizeLowerBound", "prizeUpperBound", "cmc"];
@@ -46,9 +46,8 @@ var ALLOWABLE_QUERY_PARAMETER = [
  * Represents a predefined list of valid sort column for active contest.
  */
 var ALLOWABLE_SORT_COLUMN = [
-    "type", "catalog", "contestName", "numberOfSubmissions", "numberOfRatedRegistrants", "numberOfUnratedRegistrants",
-    "registrationEndDate", "submissionEndDate", "firstPrize", "digitalRunPoints", "contestId",
-    "projectId", "reliabilityBonus"
+    "challengeName", "challengeName", "challengeId", "cmcTaskId", "registrationEndDate", 
+    "submissionEndDate", "finalFixEndDate", "prize1", "currentStatus", "digitalRunPoints"
 ];
 
 /**
@@ -246,9 +245,6 @@ function setFilter(helper, listType, filter, sqlParams) {
     if (_.isDefined(filter.type)) {
         sqlParams.ctn = filter.type.toLowerCase();
     }
-    if (_.isDefined(filter.catalog)) {
-        sqlParams.catalog = filter.catalog.toLowerCase();
-    }
     if (_.isDefined(filter.contestName)) {
         sqlParams.pjn = "%" + filter.contestName.toLowerCase() + "%";
     }
@@ -320,20 +316,31 @@ function transferResult(src) {
     var ret = [];
     src.forEach(function (row) {
         var contest = {
-            type: row.type,
-            catalog: row.catalog,
-            contestName: row.contestname,
-            numberOfSubmissions: row.numberofsubmissions,
-            numberOfRatedRegistrants: row.numberofunratedregistrants,
-            numberOfUnratedRegistrants: row.numberofratedregistrants,
-            contestId: row.contestid,
-            projectId: row.projectid,
-            registrationEndDate: formatDate(row.registrationenddate),
-            submissionEndDate: formatDate(row.submissionenddate),
-            prize: [],
-            reliabilityBonus: row.reliabilitybonus,
+            challengeType : row.challengetype,
+            challengeName : row.challengename,
+            challengeId : row.challengeid,
+            projectId : row.projectid,
+            forumId : row.forumid,
+            screeningScorecardId : row.screeningscorecardid,
+            reviewScorecardId : row.reviewscorecardid,
+            cmcTaskId : convertNull(row.cmctaskid),
+            numberOfCheckpointsPrizes : row.numberofcheckpointsprizes,
+            topCheckPointPrize : convertNull(row.topcheckPointprize),
+            postingDate : formatDate(row.postingdate),
+            registrationEndDate : formatDate(row.registrationenddate),
+            checkpointSubmissionEndDate : formatDate(row.checkpointsubmissionenddate),
+            submissionEndDate : formatDate(row.submissionenddate),
+            appealsEndDate : formatDate(row.appealsenddate),
+            finalFixEndDate : formatDate(row.finalfixenddate),
+            currentPhaseEndDate : formatDate(row.currentphaseenddate),
+            currentStatus : row.currentstatus,
+            currentPhaseName : convertNull(row.currentphasename),
             digitalRunPoints: row.digitalrunpoints,
-            cmc: convertNull(row.cmc)
+            prize: [],
+            
+            //TODO: move these out to constants and/or helper 
+            reliabilityBonus: _.isNumber(row.prize1) ? row.prize1 * 0.2 : 0,
+            challengeCommunity: (row.isstudio) ? 'design' : 'develop'
         },
             i,
             prize;
@@ -358,10 +365,10 @@ function transferResult(src) {
  * @param {Function<connection, render>} next - The callback to be called after this function is done
  * @param {Boolean} software - The flag if search only software contests
  */
-var searchContests = function (api, connection, dbConnectionMap, next, software) {
+var searchContests = function (api, connection, dbConnectionMap, next, community) {
     var helper = api.helper,
         query = connection.rawConnection.parsedURL.query,
-        copyToFilter = ["type", "catalog", "contestName", "projectId", "prizeLowerBound",
+        copyToFilter = ["type", "contestName", "projectId", "prizeLowerBound",
             "prizeUpperBound", "cmc"],
         sqlParams = {},
         filter = {},
@@ -387,42 +394,16 @@ var searchContests = function (api, connection, dbConnectionMap, next, software)
     pageIndex = Number(query.pageindex || 1);
     pageSize = Number(query.pagesize || 50);
 
-    //create date or return null if all properties are null
-    function createDate(type, firstDate, secondDate) {
-        if (!type && !firstDate && !secondDate) {
-            return null;
-        }
-        return {
-            type: String(type).toUpperCase(),
-            firstDate: firstDate,
-            secondDate: secondDate
-        };
-    }
-    filter.registrationStartDate = createDate(
-        query["registrationstartdate.type"],
-        query["registrationstartdate.firstdate"],
-        query["registrationstartdate.seconddate"]
-    );
-
-    filter.submissionEndDate = createDate(
-        query["submissionenddate.type"],
-        query["submissionenddate.firstdate"],
-        query["submissionenddate.seconddate"]
-    );
-
-    filter.contestFinalizationDate = createDate(
-        query["contestfinalizationdate.type"],
-        query["contestfinalizationdate.firstdate"],
-        query["contestfinalizationdate.seconddate"]
-    );
-
     copyToFilter.forEach(function (p) {
         if (query.hasOwnProperty(p.toLowerCase())) {
             filter[p] = query[p.toLowerCase()];
         }
     });
 
-    sqlParams.project_type_id = software ? SOFTWARE_CATEGORY : STUDIO_CATEGORY;
+    //default to software
+    sqlParams.project_type_id = SOFTWARE_CATEGORY;
+    if (community === 'design') {  sqlParams.project_type_id = STUDIO_CATEGORY; }
+    if (community === 'both') {  sqlParams.project_type_id = SOFTWARE_CATEGORY.concat(STUDIO_CATEGORY); }
 
     async.waterfall([
         function (cb) {
@@ -465,7 +446,7 @@ var searchContests = function (api, connection, dbConnectionMap, next, software)
 };
 
 /**
- * This is the function that actually search contests
+ * This is the function that gets contest details
  * 
  * @param {Object} api - The api object that is used to access the global infrastructure
  * @param {Object} connection - The connection object for the current request
@@ -621,7 +602,63 @@ exports.searchSoftwareContests = {
     run: function (api, connection, next) {
         if (this.dbConnectionMap) {
             api.log("Execute searchContests#run", 'debug');
-            searchContests(api, connection, this.dbConnectionMap, next, true);
+            searchContests(api, connection, this.dbConnectionMap, next, 'develop');
+        } else {
+            api.log("dbConnectionMap is null", "debug");
+            connection.rawConnection.responseHttpCode = 500;
+            connection.response = {message: "No connection object."};
+            next(connection, true);
+        }
+    }
+};
+
+/**
+ * The API for searching contests
+ */
+exports.searchStudioContests = {
+    name: "searchStudioContests",
+    description: "searchStudioContests",
+    inputs: {
+        required: [],
+        optional: ALLOWABLE_QUERY_PARAMETER
+    },
+    blockedConnectionTypes: [],
+    outputExample: {},
+    version: 'v2',
+    transaction : 'read', // this action is read-only
+    databases : ["tcs_catalog"],
+    run: function (api, connection, next) {
+        if (this.dbConnectionMap) {
+            api.log("Execute searchContests#run", 'debug');
+            searchContests(api, connection, this.dbConnectionMap, next, 'design');
+        } else {
+            api.log("dbConnectionMap is null", "debug");
+            connection.rawConnection.responseHttpCode = 500;
+            connection.response = {message: "No connection object."};
+            next(connection, true);
+        }
+    }
+};
+
+/**
+ * Generic API for searching contests
+ */
+exports.searchSoftwareAndStudioContests = {
+    name: "searchSoftwareAndStudioContests",
+    description: "searchSoftwareAndStudioContests",
+    inputs: {
+        required: [],
+        optional: ALLOWABLE_QUERY_PARAMETER
+    },
+    blockedConnectionTypes: [],
+    outputExample: {},
+    version: 'v2',
+    transaction : 'read', // this action is read-only
+    databases : ["tcs_catalog"],
+    run: function (api, connection, next) {
+        if (this.dbConnectionMap) {
+            api.log("Execute searchContests#run", 'debug');
+            searchContests(api, connection, this.dbConnectionMap, next, 'both');
         } else {
             api.log("dbConnectionMap is null", "debug");
             connection.rawConnection.responseHttpCode = 500;

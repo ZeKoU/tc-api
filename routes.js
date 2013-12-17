@@ -78,6 +78,7 @@ var testMethods = {
 exports.routes = {
     get: [
         { path: "/:apiVersion/logs", action: "getLogTail" },
+        { path: "/:apiVersion/challenges", action: "searchSoftwareAndStudioContests" },
 
         { path: "/:apiVersion/develop/challengetypes", action: "contestTypes" },
         { path: "/:apiVersion/develop/challenges/:contestId", action: "getContest" },
