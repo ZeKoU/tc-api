@@ -41,6 +41,10 @@ SELECT (p.project_studio_spec_id IS NOT NULL) AS is_studio
                 WHERE phase_type_id = nd_phase.phase_type_id)
             ELSE NULL
             END AS currentPhaseName
+     , CASE WHEN (nd_phase.scheduled_end_time IS NOT NULL) THEN
+            (( nd_phase.scheduled_end_time - CURRENT)::interval second(9) to second)::char(10)::int8
+            ELSE 0
+            END AS currentPhaseRemainingTime
      , CASE WHEN pidr.value = 'On' THEN 
        NVL((SELECT value::decimal FROM project_info pi_dr WHERE pi_dr.project_info_type_id = 30 AND pi_dr.project_id = p.project_id), (SELECT round(NVL(pi16.value::decimal, 0)) FROM project_info pi16 WHERE pi16.project_info_type_id = 16 AND pi16.project_id = p.project_id)) 
        ELSE NULL END AS digitalRunPoints

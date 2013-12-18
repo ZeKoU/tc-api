@@ -495,6 +495,7 @@ var getContest = function (api, connection, dbConnectionMap, next) {
                 currentPhaseEndDate : formatDate(data.currentphaseenddate),
                 currentStatus : data.currentstatus,
                 currentPhaseName : convertNull(data.currentphasename),
+                currentPhaseRemainingTime : data.currentphaseremainingtime,
                 digitalRunPoints: data.digitalrunpoints,
                 
                 //TODO: move these out to constants and/or helper 

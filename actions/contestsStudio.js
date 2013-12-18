@@ -115,6 +115,31 @@ function setDateToParams(helper, sqlParams, dateInterval, inputCodePrefix) {
 }
 
 /**
+ * Convert null string or if string is equal to "null"
+ * @param {String} str - the string to convert.
+ * @return {String} converted string
+ */
+function convertNull(str) {
+    if (!str || str === "null") {
+        return "";
+    }
+    return str;
+}
+
+
+/**
+ * Format date
+ * @param {Date} the date to format
+ * @return {String} formated date
+ */
+function formatDate(date) {
+    if (!date) {
+        return "";
+    }
+    return date;
+}
+
+/**
  * The API for searching contests
  */
 exports.searchStudioContestsOLD = {
@@ -377,19 +402,40 @@ exports.getStudioContest = {
                         submissionTime: s.create_date
                     };
                 },
-                    details = results.details[0];
+                    data = results.details[0];
                 result = {
-                    challengeType: details.challengetype,
-                    challengeName: details.challengename,
-                    detailedRequirements: helper.convertToString(details.detailedrequirements),
+                    challengeType : data.challengetype,
+                    challengeName : data.challengename,
+                    challengeId : data.challengeid,
+                    projectId : data.projectid,
+                    forumId : data.forumid,
+                    detailedRequirements : data.detailedrequirements,
+                    finalSubmissionGuidelines : data.finalsubmissionguidelines,
+                    screeningScorecardId : data.screeningscorecardid,
+                    reviewScorecardId : data.reviewscorecardid,
+                    cmcTaskId : convertNull(data.cmctaskid),
+                    numberOfCheckpointsPrizes : data.numberofcheckpointsprizes,
+                    topCheckPointPrize : convertNull(data.topcheckPointprize),
+                    postingDate : formatDate(data.postingdate),
+                    registrationEndDate : formatDate(data.registrationenddate),
+                    checkpointSubmissionEndDate : formatDate(data.checkpointsubmissionenddate),
+                    submissionEndDate : formatDate(data.submissionenddate),
+                    appealsEndDate : formatDate(data.appealsenddate),
+                    finalFixEndDate : formatDate(data.finalfixenddate),
+                    currentPhaseEndDate : formatDate(data.currentphaseenddate),
+                    currentStatus : data.currentstatus,
+                    currentPhaseName : convertNull(data.currentphasename),
+                    currentPhaseRemainingTime : data.currentphaseremainingtime,
+                    digitalRunPoints: data.digitalrunpoints,
+                    
+                    //TODO: move these out to constants and/or helper 
+                    directUrl : 'https://www.topcoder.com/direct/contest/detail.action?projectId=' + data.challengeid,
+
+                    
                     prize: _.map(results.prize, function (s) {
                         return s.amount;
                     }),
-                    numberOfCheckpointsPrizes: details.numberofcheckpointsprizes,
-                    topCheckPointPrize: details.topcheckpointprize,
-                    digitalRunPoints: details.dr_point,
-                    currentPhaseEndDate: details.currentphaseenddate,
-                    currentStatus: details.currentstatus.trim(),
+
                     checkpoints: _.map(results.checkpoints, mapCheckpointOrSubmission),
                     submissions: _.map(results.submissions, mapCheckpointOrSubmission),
                     winners: _.map(results.winners, function (s) {
