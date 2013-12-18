@@ -119,4 +119,3 @@ FIRST @ps@
    AND p.tc_direct_project_id = DECODE(@tcdirectid@, 0, p.tc_direct_project_id, @tcdirectid@)
    AND NVL(LOWER(pi70.value), '') = DECODE('@cmc@', '', NVL(LOWER(pi70.value), ''), '@cmc@')
 ORDER BY @sf@ @sd@
-
