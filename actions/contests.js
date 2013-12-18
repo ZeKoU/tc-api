@@ -500,6 +500,7 @@ var getContest = function (api, connection, dbConnectionMap, next) {
                 
                 //TODO: move these out to constants and/or helper 
                 reliabilityBonus: _.isNumber(data.prize1) ? data.prize1 * 0.2 : 0,
+                challengeCommunity: (data.isstudio) ? 'design' : 'develop',
                 directUrl : 'https://www.topcoder.com/direct/contest/detail.action?projectId=' + data.challengeid,
                 
                 prize: [],

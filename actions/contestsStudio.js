@@ -429,6 +429,7 @@ exports.getStudioContest = {
                     digitalRunPoints: data.digitalrunpoints,
                     
                     //TODO: move these out to constants and/or helper 
+                    challengeCommunity: (data.isstudio) ? 'design' : 'develop',
                     directUrl : 'https://www.topcoder.com/direct/contest/detail.action?projectId=' + data.challengeid,
 
                     
