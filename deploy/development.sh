@@ -8,7 +8,7 @@
 #
 
 export TC_DB_NAME=informixoltp_tcp
-export TC_DB_HOST=54.197.52.53
+export TC_DB_HOST=54.227.11.50
 export TC_DB_PORT=2021
 export TC_DB_USER=informix
 export TC_DB_PASSWORD=1nf0rm1x

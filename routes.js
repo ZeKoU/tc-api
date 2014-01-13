@@ -102,8 +102,11 @@ exports.routes = {
         { path: "/:apiVersion/data/countries", action: "countries" },
 
         //example secure route using oauth. for future reference.
-        { path: "/:apiVersion/secure/challengetypes", action: "softwareTypesSecured" },
-        
+        //{ path: "/:apiVersion/secure/challengetypes", action: "softwareTypesSecured" },
+
+        //example secure route using auth0
+        { path: "/:apiVersion/a0/demoResource", action: "authZeroActions" },
+
         { path: "/:apiVersion/platform/statistics", action: "tcDirectFacts" },
 
         //Stubs APIs
