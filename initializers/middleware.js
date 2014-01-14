@@ -18,6 +18,7 @@ var _ = require('underscore');
 var crypto = require('crypto');
 var configs = require("../config.js");
 var jwtlib = require('jsonwebtoken');
+var dao = require('./dataAccess.js');
 
 /**
  * Define the config to get the API Host from the environment variables.
@@ -82,7 +83,16 @@ exports.middleware = function (api, next) {
                     done("Error: Couldn't decode token. Reason: " + error, 400); //Bad request
                 } else {
                     api.log("Decoded JWT! ", "debug");
-                    //TODO Based on JWT get user from TC's DB.
+                    //TODO Based on JWT get user from TC's DB, get role and set (check async.watterfall)
+
+                    /*
+                    var sql_params = { user_id:  };
+                    api.dataAccess.createConnection("common_oltp");
+                    api.dataAccess.executeQuery("check_user_exists", sql_params, configs.configData.databaseMapping, function(error, result){
+                        api.log("Execute result returned", "debug");
+
+                    });
+                    */
 
                     done(null);
                 }
