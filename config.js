@@ -47,7 +47,7 @@ configData.general = {
 };
 
 /////////////
-// logging //
+// Logging //
 /////////////
 
 configData.logger = {
@@ -154,7 +154,15 @@ configData.databaseMapping = {
     "tcs_catalog" : "TC_DB",
     "topcoder_dw" : "TC_DW",
     "tcs_dw" : "TC_DW"
-}
+};
+
+/////////////
+// Auth 0  //
+/////////////
+configData.auth0 = {
+    //This is actual client_secret for App created on Auth0 dashboard
+    jwtSignatureKey : "Wkhe-zrgNaEia0MA7FqzMj-3He79BzFSPV0rHy1g4OHCrLJR8fLDyB0ZShyebLBZ" //TODO: Remove before commit...
+};
 
 //////////////////////////////////
 

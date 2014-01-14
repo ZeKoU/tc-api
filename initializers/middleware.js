@@ -1,4 +1,4 @@
-/*jslint node: true */
+/* jslint node: true */
 /*
  * Copyright (C) 2013 TopCoder Inc., All Rights Reserved.
  *
@@ -8,7 +8,6 @@
  * - add cache support (add preCacheProcessor and postCacheProcessor)
  */
 "use strict";
-
 /**
  * Module dependencies.
  */
@@ -17,6 +16,8 @@ var xml2js = require('xml2js');
 var async = require('async');
 var _ = require('underscore');
 var crypto = require('crypto');
+var configs = require("../config.js");
+var jwtlib = require('jsonwebtoken');
 
 /**
  * Define the config to get the API Host from the environment variables.
@@ -31,7 +32,6 @@ var config = {
  * @param {String} name The name of the header.
  */
 var getHeader = function (req, name) {
-    console.log("Reading header: " + name);
     name = name.toLowerCase();
     switch (name) {
     case 'referer':
@@ -64,8 +64,30 @@ exports.middleware = function (api, next) {
         if (!authHeader || authHeader.trim().length === 0) {
             done("Authentication Header is missing", 403);
         } else {
-            done(null);
-            return;
+            api.log("Parsing JWT...", "debug");
+            var token = authHeader.split(" ");
+            if (token.length !== 2) {
+                done("Error: Invalid token!", 400);//Bad request
+            } else if (token.length === 2 && token[0] !== "Bearer") {
+                done("Error: Invalid token. Bearer token expected!", 400);//Bad request
+            }
+
+            var jwt = token[1];
+            api.log("JWT sent: " + jwt, "debug");
+            //TODO: Parse with jwtlib
+            var clientSecret = new Buffer(configs.configData.auth0.jwtSignatureKey, "base64");
+            jwtlib.verify(jwt, clientSecret, function(error, decodedToken) {
+                if (error) {
+                    api.log("Error decoding JWT: " + error, "error");
+                    done("Error: Couldn't decode token. Reason: " + error, 400); //Bad request
+                } else {
+                    api.log("Decoded JWT! ", "debug");
+                    //TODO Based on JWT get user from TC's DB.
+
+                    done(null);
+                }
+            });
+
         }
     };
 
@@ -78,17 +100,17 @@ exports.middleware = function (api, next) {
      * @param {Function<connection, toRender>} next The callback function
      */
     auth0Processor = function (connection, actionTemplate, next) {
-        api.log("Action Template : " + actionTemplate, "debug");
         if (actionTemplate.auth0Protected === true) {
+            api.log("Auth0 pre-processor invoked!", "debug");
             authorize(getHeader(connection.rawConnection.req, 'Authorization'), function (error, statusCode) {
-                    if (error) {
-                        connection.error = error;
-                        connection.responseHttpCode = statusCode;
-                        next(connection, false);
-                    } else {
-                        next(connection, true);
-                    }
-                });
+                if (error) {
+                    connection.error = error;
+                    connection.responseHttpCode = statusCode;
+                    next(connection, false);
+                } else {
+                    next(connection, true);
+                }
+            });
 
         } else {
             next(connection, true);
