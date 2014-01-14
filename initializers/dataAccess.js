@@ -138,7 +138,7 @@ exports.dataAccess = function (api, next) {
                             return;
                         }
                         /*jslint */
-                        api.log("Reading " + file, "debug");
+                        //api.log("Reading " + file, "debug");
                         var json = require(relativeDir + "/" + file);
                         queries[json.name] = json;
                         fs.readFile(dir + "/" + json.sqlfile, {
@@ -269,6 +269,8 @@ exports.dataAccess = function (api, next) {
                                 api.log('Finish executing ' + f, 'debug');
                             }
                         }).execute();
+                    } else {
+                        api.log("Connection not connected!", "debug");
                     }
                 }
             ], function (err, result) {

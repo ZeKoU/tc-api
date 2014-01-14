@@ -161,7 +161,24 @@ configData.databaseMapping = {
 /////////////
 configData.auth0 = {
     //This is actual client_secret for App created on Auth0 dashboard
-    jwtSignatureKey : "Wkhe-zrgNaEia0MA7FqzMj-3He79BzFSPV0rHy1g4OHCrLJR8fLDyB0ZShyebLBZ" //TODO: Remove before commit...
+    jwtSignatureKey : "Wkhe-zrgNaEia0MA7FqzMj-3He79BzFSPV0rHy1g4OHCrLJR8fLDyB0ZShyebLBZ", //TODO: Remove before commit...
+    socialProviders : {
+        GOOGLE_PROVIDER : 1,
+        FACEBOOK_PROVIDER : 2,
+        TWITTER_PROVIDER : 3,
+        GITHUB_PROVIDER : 4,
+        SALESFORCE_PROVIDER : 5,
+        ENTERPRISE_LDAP_PROVIDER : 6
+    }
+};
+
+///////////////
+// User roles//
+///////////////
+configData.userRoles = {
+    ANON : "anon",
+    BASIC: "member",
+    ADMIN: "admin"
 };
 
 //////////////////////////////////

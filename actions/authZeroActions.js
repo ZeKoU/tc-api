@@ -18,13 +18,8 @@
  */
 var getSecuredResource = function (api, connection, next) {
     api.log("Executing dummy auth0 api request!");
-    var ret = [];
-    ret.push({
-        username: "Foo",
-        password: "Bar",
-        description: "Demo API protected by Auth0"
-    });
-    connection.response = ret;
+
+    connection.response = { "caller": connection.caller };
     next(connection, true);
 };
 
@@ -37,11 +32,18 @@ exports.action = {
     },
     blockedConnectionTypes: [],
     auth0Protected: true,
+    //transaction : 'read', // this action is read-only
+    //databases : ['tcs_catalog'],
     outputExample: {},
-    version: 1.0,
+    version : 'v2',
     run: function(api, connection, next) {
-        api.log("Execute authZeroActions#run", 'debug');
-        getSecuredResource(api, connection, next);
-        next(connection, true);
+        //if (this.dbConnectionMap) {
+            api.log("Execute authZeroActions#run", 'debug');
+            getSecuredResource(api, connection, next);
+            next(connection, true);
+        //} else {
+        //    api.helper.handleNoConnection(api, connection, next);
+        //}
+
     }
 };

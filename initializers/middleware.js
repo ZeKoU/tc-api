@@ -51,17 +51,181 @@ var getHeader = function (req, name) {
  * @param {Function<err>} next The callback function
  */
 exports.middleware = function (api, next) {
-    var auth0Processor, authorize;
+    var databaseName = 'common_oltp';
+    var auth0Processor,
+        authorize,
+        getProviderId,
+        queryUserId,
+        queryHandle,
+        dbConnection;
+
+     /**
+     * Helper function to decide if login is social, given the JWT object
+     * @param {Object} jwt JSON Web Token with social identities
+     */
+     function isSocialLogin(jwt){
+        var identities = jwt.identities;
+        if(!identities || identities.length === 0) {
+            api.log("No identities detected in JWT!", "error");
+            return false;
+        } else {
+            for(var identity in identities){
+                var ident = identities[identity];
+                api.log("Identity: " + JSON.stringify(ident), "debug");
+                if(ident.isSocial === true) { 
+                    api.log("Social identity detected!", "debug");
+                    return true;
+                }
+            }
+            api.log("Normal (non-social) identity detected!", "debug");
+            return false;
+        }
+     }
+
+     /**
+     * Helper function to get user_id from identity contained within JSON Web Token
+     * @param {Object} jwt JSON Web Token with social identities
+     */
+     function getSocialUserId(jwt) {
+        var identities = jwt.identities;
+        if( !identities || identities.length === 0) {
+            api.log("No identities detected in JWT!", "error");
+            return false;
+        } else {
+            for(var identity in identities) {
+                var ident = identities[identity];
+                if(ident.isSocial === true) {
+                    return ident.user_id;
+                }
+            }
+        }
+        return null;
+     }
+
+     /**
+     * Helper function to query user_id from user_social_login table
+     * @param {Integer} providerId ID of Social Provider
+     * @param {String}  social_user_id This is user_id as defined in social Auth0 Identity
+     * @param {function} cb This is callback function to return result
+     */
+     queryUserId = function (providerId, social_user_id, cb) {
+        var queryName = "get_user_id";
+        var dbConnectionMap = { };
+        dbConnectionMap[databaseName] = dbConnection;
+        var sqlParameters = { social_user_id: social_user_id, social_login_provider_id: providerId };
+        
+            //Execute query...
+            api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+                api.log("SQL execute result returned", "debug");
+                if (error) {
+                    api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                    cb(error, null);
+                } else {
+                    if(result.length > 0){
+                        //api.log("Result: " + JSON.stringify(result[0]));
+                        cb(null, result[0].user_id);
+                    } else {
+                        //api.log("No result in query!", "debug");
+                        cb(null, null);
+                    }
+                }
+            });
+        
+    }
+
+    /**
+    * Helper function to query handle from the user table
+    * @param {Integer} user_id ID of the user
+    * @param {function} cb Callback function to return result
+    */
+    queryHandle = function (user_id, cb) {
+        var queryName = "get_user_handle";
+        var dbConnectionMap = { };
+        dbConnectionMap[databaseName] = dbConnection;
+        var sqlParameters = { user_id: user_id};
+        
+            api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+                api.log("SQL execute result returned", "debug");
+                if (error) {
+                    api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                    cb(error, null);
+                } else {
+                    if(result.length > 0){
+                        //api.log("Result: " + JSON.stringify(result[0]));
+                        cb(null, result[0].handle);
+                    } else {
+                        //api.log("No result in query!", "debug");
+                        cb(null, null);
+                    }
+                }
+            });
+
+    }
+
+
+
+    /**
+    * Helper function to connect to database
+    * @param {Function<error>} callback The callback function.
+    */
+    function dbConnect(callback){
+
+        if(!dbConnection){
+            dbConnection = api.dataAccess.createConnection(databaseName);
+        }
+
+        if(!dbConnection.isConnected()){
+            // connnect to the connection
+            dbConnection.on('error', function (err) {
+                dbConnection.disconnect();
+                api.log("Database connection to " + databaseName + " error: " + err + " " + (err.stack || ''), 'error');
+            }).initialize().connect(function (err) {
+                if (err) {
+                    dbConnection.disconnect();
+                    api.log("Database " + databaseName + " cannot be connected: " + err + " " + (err.stack || ''), 'error');
+                    callback(err);
+                } else {
+                    api.log("Database " + databaseName + " connected", 'info');
+                    callback();//no error
+                }
+            });
+        }
+        callback(); //return with no error
+    }
+
+
+     /**
+     * Helper function to get provider id persisted in database from configuration mapping
+     * @param {String} user_id Full user_id field of JSON Web Token
+     */
+     getProviderId = function(user_id) {
+        var providerString = user_id.split("|")[0];
+        if (providerString.indexOf("google") > -1) {
+            return configs.configData.auth0.socialProviders.GOOGLE_PROVIDER;
+        } else if (providerString.indexOf("facebook") > -1) {
+            return configs.configData.auth0.socialProviders.FACEBOOK_PROVIDER;
+        } else if (providerString.indexOf("twitter") > -1) {
+            return configs.configData.auth0.socialProviders.TWITTER_PROVIDER;
+        } else if (providerString.indexOf("github") > -1) {
+            return configs.configData.auth0.socialProviders.GITHUB_PROVIDER;
+        } else if (providerString.indexOf("salesforce") > -1) {
+            return configs.configData.auth0.socialProviders.SALESFORCE_PROVIDER;
+        } else if (providerString.indexOf("ldap") > -1) { //FIXME : How to detect LDAP mapping 
+            return configs.configData.auth0.socialProviders.ENTERPRISE_LDAP_PROVIDER;
+        }
+     }
+
 
      /**
      * Helper function to authorize request, given the header and the action scope.
      *
+     * @param {Object} connection ActionHero connection object
      * @param {String} authHeader The authorization header value
      * @param {String} actionScope The permission scope of the given action
      * @param {Function<err, status>} done The callback function
      */
-    authorize = function (authHeader, done) {
-
+    authorize = function (connection, authHeader, done) {
+        
         if (!authHeader || authHeader.trim().length === 0) {
             done("Authentication Header is missing", 403);
         } else {
@@ -69,35 +233,65 @@ exports.middleware = function (api, next) {
             var token = authHeader.split(" ");
             if (token.length !== 2) {
                 done("Error: Invalid token!", 400);//Bad request
+                
             } else if (token.length === 2 && token[0] !== "Bearer") {
                 done("Error: Invalid token. Bearer token expected!", 400);//Bad request
+                
             }
 
             var jwt = token[1];
-            api.log("JWT sent: " + jwt, "debug");
+            //api.log("JWT sent: " + jwt, "debug");
             //TODO: Parse with jwtlib
             var clientSecret = new Buffer(configs.configData.auth0.jwtSignatureKey, "base64");
-            jwtlib.verify(jwt, clientSecret, function(error, decodedToken) {
+            jwtlib.verify(jwt, clientSecret, function (error, decodedToken) {
                 if (error) {
                     api.log("Error decoding JWT: " + error, "error");
                     done("Error: Couldn't decode token. Reason: " + error, 400); //Bad request
+                    
                 } else {
-                    api.log("Decoded JWT! ", "debug");
-                    //TODO Based on JWT get user from TC's DB, get role and set (check async.watterfall)
+                    //api.log("Decoded JWT: " + JSON.stringify(decodedToken) , "debug");
+                    //TODO Decide if social by parsing jwt
+                    var social = isSocialLogin(decodedToken);
+                    if(social===true){
+                        //Handle social provider
+                        var providerId = getProviderId(decodedToken.user_id);
+                        //api.log("Social provider ID: " + providerId, "debug");
+                        var social_user_id = getSocialUserId(decodedToken);
+                        //api.log("Social user_id: " + social_user_id, "debug");
 
-                    /*
-                    var sql_params = { user_id:  };
-                    api.dataAccess.createConnection("common_oltp");
-                    api.dataAccess.executeQuery("check_user_exists", sql_params, configs.configData.databaseMapping, function(error, result){
-                        api.log("Execute result returned", "debug");
+                        dbConnect(function (err) {
+                            if (err) {
+                                done("Error: " + error, 500);
 
-                    });
-                    */
+                            } else {
 
-                    done(null);
+                                queryUserId(providerId, social_user_id, function (e, user_id) {
+                                    if(e) {
+                                        api.log("Error querying user_id: " + e, "debug");
+                                        done("Error querying user_id: " + e, 500);
+                                    } else {
+                                       connection.caller.userId = user_id;
+                                       queryHandle(user_id, function (e1, handle) {
+                                            if(e1){
+                                                api.log("Error querying handle: " + e1, "debug");
+                                                done("Error querying handle: " + e1, 500);
+                                            } else {
+                                                if(handle){
+                                                    connection.caller.handle = handle;
+                                                    done(null, 200);
+                                                }
+                                            }
+                                       });
+                                    }
+                                });
+                            }
+                        });
+                    } else {
+                        //Handle  standard username/password login
+                        done(null,200);
+                    }
                 }
             });
-
         }
     };
 
@@ -110,19 +304,23 @@ exports.middleware = function (api, next) {
      * @param {Function<connection, toRender>} next The callback function
      */
     auth0Processor = function (connection, actionTemplate, next) {
+        connection.caller = {};
         if (actionTemplate.auth0Protected === true) {
             api.log("Auth0 pre-processor invoked!", "debug");
-            authorize(getHeader(connection.rawConnection.req, 'Authorization'), function (error, statusCode) {
+            authorize(connection, getHeader(connection.rawConnection.req, 'Authorization'), function (error, statusCode) {
                 if (error) {
+                    api.log("Auth0 pre-processor error!", "debug");
                     connection.error = error;
                     connection.responseHttpCode = statusCode;
                     next(connection, false);
                 } else {
+                    api.log("Auth0 pre-processor finnished!", "debug");
                     next(connection, true);
                 }
             });
-
         } else {
+            //Allow anonymous access
+            connection.caller.accessLevel = configs.configData.userRoles.ANON;
             next(connection, true);
         }
     };

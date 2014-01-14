@@ -1,0 +1,1 @@
+select user_id from user_social_login where social_user_id='@social_user_id@' and social_login_provider_id=@social_login_provider_id@
