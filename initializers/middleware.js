@@ -56,6 +56,8 @@ exports.middleware = function (api, next) {
         authorize,
         getProviderId,
         queryUserId,
+        queryRoleId,
+        querySecurityRoleId,
         queryHandle,
         dbConnection;
 
@@ -72,7 +74,7 @@ exports.middleware = function (api, next) {
             for(var identity in identities){
                 var ident = identities[identity];
                 api.log("Identity: " + JSON.stringify(ident), "debug");
-                if(ident.isSocial === true) { 
+                if(ident.isSocial === true) {
                     api.log("Social identity detected!", "debug");
                     return true;
                 }
@@ -103,6 +105,64 @@ exports.middleware = function (api, next) {
      }
 
      /**
+     * Helper function to query role_id from security_roles table
+     * @param {Integer} role_id The role_id from roles table
+     */
+     querySecurityRoleId = function (role_ids, cb) {
+        var queryName = "get_security_role_id";
+        var dbConnectionMap = { };
+        dbConnectionMap[databaseName] = dbConnection;
+        var sqlParameters = { role_ids: role_ids };
+
+        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+            api.log("SQL execute result returned", "debug");
+            if (error) {
+                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                cb(error, null);
+            } else {
+                if(result.length > 0){
+                    //api.log("Result: " + JSON.stringify(result[0]));
+                    cb(null, result[0].role_id);
+                } else {
+                    //api.log("No result in query!", "debug");
+                    cb(null, null);
+                }
+            }
+        });
+     };
+
+     /**
+     * Helper function to query role_id from user_role_xref table
+     * @param {Integer} user_id The user_id
+     */
+     queryRoleId = function (user_id, cb) {
+        var queryName = "get_role_id";
+        var dbConnectionMap = { };
+        dbConnectionMap[databaseName] = dbConnection;
+        var sqlParameters = { user_id: user_id };
+
+        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+            api.log("SQL execute result returned", "debug");
+            if (error) {
+                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                cb(error, null);
+            } else {
+                if(result.length > 0){
+                    //api.log("Result: " + JSON.stringify(result[0]));
+                    var ret = [];
+                    result.forEach(function (item) {
+                        ret.push(item.role_id);
+                    });
+                    cb(null, ret.join(","));
+                } else {
+                    //api.log("No result in query!", "debug");
+                    cb(null, null);
+                }
+            }
+        });
+     };
+
+     /**
      * Helper function to query user_id from user_social_login table
      * @param {Integer} providerId ID of Social Provider
      * @param {String}  social_user_id This is user_id as defined in social Auth0 Identity
@@ -113,25 +173,22 @@ exports.middleware = function (api, next) {
         var dbConnectionMap = { };
         dbConnectionMap[databaseName] = dbConnection;
         var sqlParameters = { social_user_id: social_user_id, social_login_provider_id: providerId };
-        
-            //Execute query...
-            api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
-                api.log("SQL execute result returned", "debug");
-                if (error) {
-                    api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
-                    cb(error, null);
+        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+            api.log("SQL execute result returned", "debug");
+            if (error) {
+                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                cb(error, null);
+            } else {
+                if(result.length > 0){
+                    //api.log("Result: " + JSON.stringify(result[0]));
+                    cb(null, result[0].user_id);
                 } else {
-                    if(result.length > 0){
-                        //api.log("Result: " + JSON.stringify(result[0]));
-                        cb(null, result[0].user_id);
-                    } else {
-                        //api.log("No result in query!", "debug");
-                        cb(null, null);
-                    }
+                    //api.log("No result in query!", "debug");
+                    cb(null, null);
                 }
-            });
-        
-    }
+            }
+        });
+    };
 
     /**
     * Helper function to query handle from the user table
@@ -143,26 +200,22 @@ exports.middleware = function (api, next) {
         var dbConnectionMap = { };
         dbConnectionMap[databaseName] = dbConnection;
         var sqlParameters = { user_id: user_id};
-        
-            api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
-                api.log("SQL execute result returned", "debug");
-                if (error) {
-                    api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
-                    cb(error, null);
+        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+            api.log("SQL execute result returned", "debug");
+            if (error) {
+                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                cb(error, null);
+            } else {
+                if(result.length > 0){
+                    //api.log("Result: " + JSON.stringify(result[0]));
+                    cb(null, result[0].handle);
                 } else {
-                    if(result.length > 0){
-                        //api.log("Result: " + JSON.stringify(result[0]));
-                        cb(null, result[0].handle);
-                    } else {
-                        //api.log("No result in query!", "debug");
-                        cb(null, null);
-                    }
+                    //api.log("No result in query!", "debug");
+                    cb(null, null);
                 }
-            });
-
-    }
-
-
+            }
+        });
+    };
 
     /**
     * Helper function to connect to database
@@ -186,11 +239,62 @@ exports.middleware = function (api, next) {
                     callback(err);
                 } else {
                     api.log("Database " + databaseName + " connected", 'info');
-                    callback();//no error
+                    callback();
                 }
             });
         }
-        callback(); //return with no error
+        callback();
+    }
+
+    function handleAccessLevel(user_id, connection, done){
+        queryRoleId(user_id, function (e2, role_ids) {
+            if(e2){
+                api.log("Error querying role_id: " + e2, "debug");
+                done("Error querying role_id: " + e2, 500);
+            } else {
+                if(role_ids===null) {
+                    api.log("No roles for user provided by user_id: " + user_id, "debug");
+                    queryHandle(user_id, function (e1, handle) {
+                        if(e1){
+                            api.log("Error querying handle: " + e1, "debug");
+                            done("Error querying handle: " + e1, 500);
+                        } else {
+                            if(handle){
+                                connection.caller.handle = handle;
+                            }
+                            done(null, 200);
+                        }
+                    });
+                    return;
+                }
+
+                //Check only if some roles are defined...
+                api.log("role_ids: " + role_ids, "debug");
+                querySecurityRoleId(role_ids, function (e3, security_role_id) {
+                    if (e3) {
+                        api.log("Error querying security_status_id: " + e3, "debug");
+                        done("Error querying security_status_id: " + e3, 500);
+                    } else {
+                        if(security_role_id) {
+                            connection.caller.accessLevel = configs.configData.userRoles.ADMIN;
+                        } else {
+                            connection.caller.accessLevel = configs.configData.userRoles.BASIC;
+                        }
+                        queryHandle(user_id, function (e1, handle) {
+                            if(e1){
+                                api.log("Error querying handle: " + e1, "debug");
+                                done("Error querying handle: " + e1, 500);
+                            } else {
+                                if(handle){
+                                    connection.caller.handle = handle;
+                                    done(null, 200);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+       });
     }
 
 
@@ -213,7 +317,7 @@ exports.middleware = function (api, next) {
         } else if (providerString.indexOf("ldap") > -1) { //FIXME : How to detect LDAP mapping 
             return configs.configData.auth0.socialProviders.ENTERPRISE_LDAP_PROVIDER;
         }
-     }
+     };
 
 
      /**
@@ -225,7 +329,7 @@ exports.middleware = function (api, next) {
      * @param {Function<err, status>} done The callback function
      */
     authorize = function (connection, authHeader, done) {
-        
+
         if (!authHeader || authHeader.trim().length === 0) {
             done("Authentication Header is missing", 403);
         } else {
@@ -233,12 +337,9 @@ exports.middleware = function (api, next) {
             var token = authHeader.split(" ");
             if (token.length !== 2) {
                 done("Error: Invalid token!", 400);//Bad request
-                
             } else if (token.length === 2 && token[0] !== "Bearer") {
                 done("Error: Invalid token. Bearer token expected!", 400);//Bad request
-                
             }
-
             var jwt = token[1];
             //api.log("JWT sent: " + jwt, "debug");
             //TODO: Parse with jwtlib
@@ -247,9 +348,8 @@ exports.middleware = function (api, next) {
                 if (error) {
                     api.log("Error decoding JWT: " + error, "error");
                     done("Error: Couldn't decode token. Reason: " + error, 400); //Bad request
-                    
                 } else {
-                    //api.log("Decoded JWT: " + JSON.stringify(decodedToken) , "debug");
+                    api.log("Decoded JWT: " + JSON.stringify(decodedToken) , "debug");
                     //TODO Decide if social by parsing jwt
                     var social = isSocialLogin(decodedToken);
                     if(social===true){
@@ -258,37 +358,31 @@ exports.middleware = function (api, next) {
                         //api.log("Social provider ID: " + providerId, "debug");
                         var social_user_id = getSocialUserId(decodedToken);
                         //api.log("Social user_id: " + social_user_id, "debug");
-
                         dbConnect(function (err) {
                             if (err) {
                                 done("Error: " + error, 500);
-
                             } else {
-
                                 queryUserId(providerId, social_user_id, function (e, user_id) {
                                     if(e) {
                                         api.log("Error querying user_id: " + e, "debug");
                                         done("Error querying user_id: " + e, 500);
                                     } else {
                                        connection.caller.userId = user_id;
-                                       queryHandle(user_id, function (e1, handle) {
-                                            if(e1){
-                                                api.log("Error querying handle: " + e1, "debug");
-                                                done("Error querying handle: " + e1, 500);
-                                            } else {
-                                                if(handle){
-                                                    connection.caller.handle = handle;
-                                                    done(null, 200);
-                                                }
-                                            }
-                                       });
+                                       handleAccessLevel(user_id, connection, done);
                                     }
                                 });
                             }
                         });
                     } else {
-                        //Handle  standard username/password login
-                        done(null,200);
+                        dbConnect(function (err) {
+                            if (err) {
+                                done("Error: " + error, 500);
+                            } else {
+                                var user_id = decodedToken.sub.split("|")[1];
+                                connection.caller.userId = user_id;
+                                handleAccessLevel(user_id, connection, done);
+                            }
+                        });
                     }
                 }
             });
