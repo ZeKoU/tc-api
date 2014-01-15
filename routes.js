@@ -101,10 +101,11 @@ exports.routes = {
         { path: "/:apiVersion/data/srm/statistics/tops", action: "getSRMTops" },
         { path: "/:apiVersion/data/countries", action: "countries" },
 
-        //example secure route using oauth. for future reference.
-        //{ path: "/:apiVersion/secure/challengetypes", action: "softwareTypesSecured" },
-
-        //example secure route using auth0
+        /*
+         * Example of dummy route secured by using Auth0
+         * Provided action will set connection.caller object collected in Auth0 preprocessor
+         * to the connection.response object just to show results in response (for verification)
+         */
         { path: "/:apiVersion/a0/demoResource", action: "authZeroActions" },
 
         { path: "/:apiVersion/platform/statistics", action: "tcDirectFacts" },
