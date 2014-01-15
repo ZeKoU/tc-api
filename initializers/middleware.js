@@ -11,8 +11,6 @@
 /**
  * Module dependencies.
  */
-var http = require('http');
-var xml2js = require('xml2js');
 var async = require('async');
 var _ = require('underscore');
 var crypto = require('crypto');
@@ -54,11 +52,6 @@ exports.middleware = function (api, next) {
     var databaseName = 'common_oltp';
     var auth0Processor,
         authorize,
-        getProviderId,
-        queryUserId,
-        queryRoleId,
-        querySecurityRoleId,
-        queryHandle,
         dbConnection;
 
      /**
@@ -105,70 +98,12 @@ exports.middleware = function (api, next) {
      }
 
      /**
-     * Helper function to query role_id from security_roles table
-     * @param {Integer} role_id The role_id from roles table
-     */
-     querySecurityRoleId = function (role_ids, cb) {
-        var queryName = "get_security_role_id";
-        var dbConnectionMap = { };
-        dbConnectionMap[databaseName] = dbConnection;
-        var sqlParameters = { role_ids: role_ids };
-
-        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
-            api.log("SQL execute result returned", "debug");
-            if (error) {
-                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
-                cb(error, null);
-            } else {
-                if(result.length > 0){
-                    //api.log("Result: " + JSON.stringify(result[0]));
-                    cb(null, result[0].role_id);
-                } else {
-                    //api.log("No result in query!", "debug");
-                    cb(null, null);
-                }
-            }
-        });
-     };
-
-     /**
-     * Helper function to query role_id from user_role_xref table
-     * @param {Integer} user_id The user_id
-     */
-     queryRoleId = function (user_id, cb) {
-        var queryName = "get_role_id";
-        var dbConnectionMap = { };
-        dbConnectionMap[databaseName] = dbConnection;
-        var sqlParameters = { user_id: user_id };
-
-        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
-            api.log("SQL execute result returned", "debug");
-            if (error) {
-                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
-                cb(error, null);
-            } else {
-                if(result.length > 0){
-                    //api.log("Result: " + JSON.stringify(result[0]));
-                    var ret = [];
-                    result.forEach(function (item) {
-                        ret.push(item.role_id);
-                    });
-                    cb(null, ret.join(","));
-                } else {
-                    //api.log("No result in query!", "debug");
-                    cb(null, null);
-                }
-            }
-        });
-     };
-
-     /**
      * Helper function to query user_id from user_social_login table
      * @param {Integer} providerId ID of Social Provider
      * @param {String}  social_user_id This is user_id as defined in social Auth0 Identity
-     * @param {function} cb This is callback function to return result
+     * @param {Function<error, result>} cb Callback for error or result
      */
-     queryUserId = function (providerId, social_user_id, cb) {
+     function queryUserId(providerId, social_user_id, cb) {
         var queryName = "get_user_id";
         var dbConnectionMap = { };
         dbConnectionMap[databaseName] = dbConnection;
@@ -193,9 +128,9 @@ exports.middleware = function (api, next) {
     /**
     * Helper function to query handle from the user table
     * @param {Integer} user_id ID of the user
-    * @param {function} cb Callback function to return result
+    * @param {Function<error, result>} cb Callback for error or result
     */
-    queryHandle = function (user_id, cb) {
+    function queryHandle(user_id, cb) {
         var queryName = "get_user_handle";
         var dbConnectionMap = { };
         dbConnectionMap[databaseName] = dbConnection;
@@ -218,16 +153,46 @@ exports.middleware = function (api, next) {
     };
 
     /**
+    * Helper function to check if user has admin access level
+    * @param {Integer} user_id The id of user being checked for admin access
+    * @oaram {Function<error, result>}  callback Callback function returning error or result
+    */
+    function queryIsAdmin(user_id, callback) {
+        var queryName = "check_is_admin";
+        var dbConnectionMap = { };
+        dbConnectionMap[databaseName] = dbConnection;
+        var sqlParameters = { login_id: user_id, user_id: user_id};
+        api.dataAccess.executeQuery(queryName, sqlParameters, dbConnectionMap, function (error, result) {
+            api.log("SQL execute result returned", "debug");
+            if (error) {
+                api.log("Error occurred: " + error + " " + (error.stack || ''), "error");
+                callback(error, null);
+            } else {
+                if(result.length > 0){
+                    //api.log("Result: " + JSON.stringify(result[0]));
+                    var isAdmin = (result[0].security_status_id === 1 ) ? true : false;
+                    callback(null, isAdmin );
+                } else {
+                    //api.log("No result in query!", "debug");
+                    callback(null, false);
+                }
+            }
+        });
+    }
+
+    /**
     * Helper function to connect to database
     * @param {Function<error>} callback The callback function.
     */
     function dbConnect(callback){
 
         if(!dbConnection){
+            api.log("Creating new connection for Auth0 middleware.", "debug");
             dbConnection = api.dataAccess.createConnection(databaseName);
         }
 
         if(!dbConnection.isConnected()){
+            api.log("Connecting to database for Auth0 middleware.", "debug");
             // connnect to the connection
             dbConnection.on('error', function (err) {
                 dbConnection.disconnect();
@@ -247,62 +212,36 @@ exports.middleware = function (api, next) {
     }
 
     function handleAccessLevel(user_id, connection, done){
-        queryRoleId(user_id, function (e2, role_ids) {
-            if(e2){
-                api.log("Error querying role_id: " + e2, "debug");
-                done("Error querying role_id: " + e2, 500);
+        queryIsAdmin(user_id, function (e, isAdmin) {
+            if (e) {
+                api.log("Error checking if user is admin!" , "debug");
+                done("Error:" + e, 500);
             } else {
-                if(role_ids===null) {
-                    api.log("No roles for user provided by user_id: " + user_id, "debug");
-                    queryHandle(user_id, function (e1, handle) {
-                        if(e1){
-                            api.log("Error querying handle: " + e1, "debug");
-                            done("Error querying handle: " + e1, 500);
-                        } else {
-                            if(handle){
-                                connection.caller.handle = handle;
-                            }
-                            done(null, 200);
-                        }
-                    });
-                    return;
-                }
-
-                //Check only if some roles are defined...
-                api.log("role_ids: " + role_ids, "debug");
-                querySecurityRoleId(role_ids, function (e3, security_role_id) {
-                    if (e3) {
-                        api.log("Error querying security_status_id: " + e3, "debug");
-                        done("Error querying security_status_id: " + e3, 500);
+                queryHandle(user_id, function (e1, handle) {
+                    if (e1) {
+                        api.log("Error querying handle: " + e1, "debug");
+                        done("Error querying handle: " + e1, 500);
                     } else {
-                        if(security_role_id) {
-                            connection.caller.accessLevel = configs.configData.userRoles.ADMIN;
-                        } else {
-                            connection.caller.accessLevel = configs.configData.userRoles.BASIC;
-                        }
-                        queryHandle(user_id, function (e1, handle) {
-                            if(e1){
-                                api.log("Error querying handle: " + e1, "debug");
-                                done("Error querying handle: " + e1, 500);
-                            } else {
-                                if(handle){
-                                    connection.caller.handle = handle;
-                                    done(null, 200);
-                                }
+                        if(handle){
+                            connection.caller.handle = handle;
+                            if( isAdmin === true ){
+                                connection.caller.accessLevel = configs.configData.userRoles.ADMIN;
+                            } else if ( isAdmin === false ) {
+                                connection.caller.accessLevel = configs.configData.userRoles.BASIC;
                             }
-                        });
+                        }
+                        done(null, 200);
                     }
                 });
             }
-       });
+        });
     }
-
 
      /**
      * Helper function to get provider id persisted in database from configuration mapping
      * @param {String} user_id Full user_id field of JSON Web Token
      */
-     getProviderId = function(user_id) {
+     function getProviderId(user_id) {
         var providerString = user_id.split("|")[0];
         if (providerString.indexOf("google") > -1) {
             return configs.configData.auth0.socialProviders.GOOGLE_PROVIDER;
@@ -331,41 +270,42 @@ exports.middleware = function (api, next) {
     authorize = function (connection, authHeader, done) {
 
         if (!authHeader || authHeader.trim().length === 0) {
-            done("Authentication Header is missing", 403);
+            //Allow anonymous access
+            connection.caller.accessLevel = configs.configData.userRoles.ANON;
+            done(null, 200);
         } else {
             api.log("Parsing JWT...", "debug");
             var token = authHeader.split(" ");
             if (token.length !== 2) {
-                done("Error: Invalid token!", 400);//Bad request
-            } else if (token.length === 2 && token[0] !== "Bearer") {
+                done("Error: Invalid token! Required format: Bearer <json_web_token>", 400);//Bad request
+                return;
+            } else if (token[0] !== "Bearer") {
                 done("Error: Invalid token. Bearer token expected!", 400);//Bad request
+                return;
             }
             var jwt = token[1];
-            //api.log("JWT sent: " + jwt, "debug");
-            //TODO: Parse with jwtlib
             var clientSecret = new Buffer(configs.configData.auth0.jwtSignatureKey, "base64");
             jwtlib.verify(jwt, clientSecret, function (error, decodedToken) {
                 if (error) {
                     api.log("Error decoding JWT: " + error, "error");
-                    done("Error: Couldn't decode token. Reason: " + error, 400); //Bad request
+                    done(error + ". Please check passed JSON Web Token!", 400); //Bad request
                 } else {
                     api.log("Decoded JWT: " + JSON.stringify(decodedToken) , "debug");
-                    //TODO Decide if social by parsing jwt
                     var social = isSocialLogin(decodedToken);
                     if(social===true){
-                        //Handle social provider
+                        //Handle social provider id
                         var providerId = getProviderId(decodedToken.user_id);
                         //api.log("Social provider ID: " + providerId, "debug");
                         var social_user_id = getSocialUserId(decodedToken);
                         //api.log("Social user_id: " + social_user_id, "debug");
                         dbConnect(function (err) {
                             if (err) {
-                                done("Error: " + error, 500);
+                                done(err, 500);
                             } else {
                                 queryUserId(providerId, social_user_id, function (e, user_id) {
                                     if(e) {
                                         api.log("Error querying user_id: " + e, "debug");
-                                        done("Error querying user_id: " + e, 500);
+                                        done(e, 500);
                                     } else {
                                        connection.caller.userId = user_id;
                                        handleAccessLevel(user_id, connection, done);
@@ -376,7 +316,7 @@ exports.middleware = function (api, next) {
                     } else {
                         dbConnect(function (err) {
                             if (err) {
-                                done("Error: " + error, 500);
+                                done(err, 500);
                             } else {
                                 var user_id = decodedToken.sub.split("|")[1];
                                 connection.caller.userId = user_id;
@@ -405,7 +345,7 @@ exports.middleware = function (api, next) {
                 if (error) {
                     api.log("Auth0 pre-processor error!", "debug");
                     connection.error = error;
-                    connection.responseHttpCode = statusCode;
+                    connection.rawConnection.responseHttpCode = statusCode;
                     next(connection, false);
                 } else {
                     api.log("Auth0 pre-processor finnished!", "debug");
@@ -413,8 +353,6 @@ exports.middleware = function (api, next) {
                 }
             });
         } else {
-            //Allow anonymous access
-            connection.caller.accessLevel = configs.configData.userRoles.ANON;
             next(connection, true);
         }
     };
