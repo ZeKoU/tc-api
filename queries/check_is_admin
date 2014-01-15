@@ -1,0 +1,1 @@
+select security_status_id from user_role_xref x, user u, security_roles sr where x.login_id = @login_id@ and u.user_id = @user_id@ and x.role_id = sr.role_id and sr.description = 'group_Admin'
