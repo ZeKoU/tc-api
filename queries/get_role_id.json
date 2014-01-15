@@ -1,0 +1,5 @@
+{
+  "name"    : "get_role_id",
+  "db"      : "common_oltp",
+  "sqlfile" : "get_role_id"
+}
