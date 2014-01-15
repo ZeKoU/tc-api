@@ -1,1 +1,0 @@
-select role_id from security_roles where role_id in (@role_ids@) and description = 'group_Admin'

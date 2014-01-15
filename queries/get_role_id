@@ -1,1 +1,0 @@
-select role_id from user_role_xref where login_id = @user_id@ and security_status_id = 1
