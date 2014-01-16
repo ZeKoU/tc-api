@@ -19,7 +19,7 @@
 var getSecuredResource = function (api, connection, next) {
     api.log("Executing dummy auth0 api request!");
 
-    connection.response = { "caller": connection.caller };
+    connection.response = [connection.caller];
     next(connection, true);
 };
 
@@ -32,6 +32,8 @@ exports.action = {
     },
     blockedConnectionTypes: [],
     auth0Protected: true,
+    cacheEnabled: false, //Disabled for Auth0 testing because consecutive hits would return
+                         //same caller JSON object no matter if Authorization header changed or not.
     //transaction : 'read', // this action is read-only
     //databases : ['tcs_catalog'],
     outputExample: {},
