@@ -1,0 +1,7 @@
+[
+  {
+    "userId": 500,
+    "handle": "TCAdmin",
+    "accessLevel": "admin"
+  }
+]
